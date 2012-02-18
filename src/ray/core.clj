@@ -88,6 +88,10 @@
                  (- (:y c) (:y pt))
                  (- (:z c) (:z pt)))))
 
+(defprotocol Shape
+  (intersect [this pt xr yr zr])
+  (normal [this pt]))
+
 (defrecord Sphere [radius center surface] Shape
            (intersect [this pt xr yr zr]
              (sphere-intersect this pt xr yr zr))
@@ -101,9 +105,9 @@
 (defn tracer [pathname]
   (with-open [w (java.io.PrintWriter. (java.io.FileWriter. pathname))]
     (.println w (str  "P2 " (* 1 100) " " (* 1 100) " 255"))
-    (doseq [y (range -49 50) x (range -49 50)]
+    (doseq [y (range -49 51) x (range -49 51)]
       (.print w (str  (color-at x y) " "))
-      (when (= 49 x) (.println w)))))
+      (when (= 50 x) (.println w)))))
 
 (defn ray-test []
   (def ^:dynamic *world* nil)
