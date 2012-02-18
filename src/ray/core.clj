@@ -34,8 +34,14 @@
 (def eye (Point. 0 0 200))
 
 (defn lambert [s int xr yr zr]
-  (let [[xn yn zn] (normal s int)]
+  (let [[xn yn zn] (sphere-normal s int)]
     (max 0 (+ (* xr xn) (* yr yn) (* zr zn)))))
+
+(defn hit [s pt xr yr zr]
+  (let [h (sphere-intersect s pt xr yr zr)]
+    (when h
+      (let [d (distance h pt)]
+        [d [s h]]))))
 
 (defn first-hit [pt xr yr zr]
   (let [hits (for [s *world* :let [h (hit s pt xr yr zr)] :when h] h)]
@@ -43,16 +49,11 @@
       [nil nil]
       (second (apply min-key #(first %) hits)))))
 
-(defn hit [s pt xr yr zr]
-  (let [h (intersect s pt xr yr zr)]
-    (when h
-      (let [d (distance h pt)]
-        (when d
-          [d [s h]])))))
-
 (defn sendray [pt xr yr zr]
   (let [[s int] (first-hit pt xr yr zr)]
-    (* (lambert s int xr yr zr) (:color (:surface s)))))
+    (if s
+      (* (lambert s int xr yr zr) (:color (:surface s)))
+      0)))
 
 (defn color-at [x y]
   (let [[xr yr zr]
@@ -67,14 +68,14 @@
 
 (defn sphere-intersect [s pt xr yr zr]
   (let [c (:center s)
-         n (minroot (+ (sq xr) (sq yr) (sq zr))
-                    (* 2 (+ (* (- (:x pt) (:x c)) xr)
-                            (* (- (:y pt) (:y c)) yr)
-                            (* (- (:z pt) (:z c)) zr)))
-                    (+ (sq (- (:x pt) (:x c)))
-                       (sq (- (:y pt) (:y c)))
-                       (sq (- (:z pt) (:z c)))
-                       (- (sq (:radius s)))))]
+        n (minroot (+ (sq xr) (sq yr) (sq zr))
+                   (* 2 (+ (* (- (:x pt) (:x c)) xr)
+                           (* (- (:y pt) (:y c)) yr)
+                           (* (- (:z pt) (:z c)) zr)))
+                   (+ (sq (- (:x pt) (:x c)))
+                      (sq (- (:y pt) (:y c)))
+                      (sq (- (:z pt) (:z c)))
+                      (- (sq (:radius s)))))]
     (if n
       (Point. (+ (:x pt) (* n xr))
               (+ (:y pt) (* n yr))
@@ -89,14 +90,24 @@
 
 (defrecord Sphere [radius center surface] Shape
            (intersect [this pt xr yr zr]
-             (sphere-intersect [this pt xr yr zr]))
+             (sphere-intersect this pt xr yr zr))
            (normal [this pt]
-             (sphere-normal [this pt])))
+             (sphere-normal this pt)))
 
 (defn defsphere [x y z r c]
   (let [s (Sphere. r (Point. x y z) (Surface. c))]
     (def ^:dynamic *world* (cons s *world*))))
 
 (defn tracer [pathname]
-  (with-open [w (java.io.FileWriter. pathname)]
-    ))
+  (with-open [w (java.io.PrintWriter. (java.io.FileWriter. pathname))]
+    (.println w (str  "P2 " (* 1 100) " " (* 1 100) " 255"))
+    (doseq [y (range -49 50) x (range -49 50)]
+      (.print w (str  (color-at x y) " "))
+      (when (= 49 x) (.println w)))))
+
+(defn ray-test []
+  (def ^:dynamic *world* nil)
+  (defsphere 0 -300 -1200 200 0.8)
+  (defsphere -80 -150 -1200 200 0.7)
+  (defsphere 70 -100 -1200 200 0.9)
+  (tracer "/tmp/spheres.pgm"))
