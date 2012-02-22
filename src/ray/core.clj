@@ -1,4 +1,5 @@
 (ns ray.core
+  (:gen-class)
   (:require [clojure.math.numeric-tower :as math]))
 
 (defn sq [x] (* x x))
@@ -29,38 +30,7 @@
 
 (defrecord Surface [color])
 
-(def ^:dynamic *world* nil)
-
 (def eye (Point. 0 0 200))
-
-(defn lambert [s int xr yr zr]
-  (let [[xn yn zn] (sphere-normal s int)]
-    (max 0 (+ (* xr xn) (* yr yn) (* zr zn)))))
-
-(defn hit [s pt xr yr zr]
-  (let [h (sphere-intersect s pt xr yr zr)]
-    (when h
-      (let [d (distance h pt)]
-        [d [s h]]))))
-
-(defn first-hit [pt xr yr zr]
-  (let [hits (for [s *world* :let [h (hit s pt xr yr zr)] :when h] h)]
-    (if (empty? hits)
-      [nil nil]
-      (second (apply min-key #(first %) hits)))))
-
-(defn sendray [pt xr yr zr]
-  (let [[s int] (first-hit pt xr yr zr)]
-    (if s
-      (* (lambert s int xr yr zr) (:color (:surface s)))
-      0)))
-
-(defn color-at [x y]
-  (let [[xr yr zr]
-        (unit-vector (- x (:x eye))
-                     (- y (:y eye))
-                     (- 0 (:z eye)))]
-    (math/round (* (sendray eye xr yr zr) 255))))
 
 (defprotocol Shape
   (intersect [this pt xr yr zr])
@@ -98,20 +68,50 @@
            (normal [this pt]
              (sphere-normal this pt)))
 
-(defn defsphere [x y z r c]
-  (let [s (Sphere. r (Point. x y z) (Surface. c))]
-    (def ^:dynamic *world* (cons s *world*))))
+(defn lambert [s int xr yr zr]
+  (let [[xn yn zn] (normal s int)]
+    (max 0 (+ (* xr xn) (* yr yn) (* zr zn)))))
 
-(defn tracer [pathname]
+(defn hit [s pt xr yr zr]
+  (let [h (intersect s pt xr yr zr)]
+    (when h
+      (let [d (distance h pt)]
+        [d [s h]]))))
+
+(defn first-hit [world pt xr yr zr]
+  (let [hits (for [s world :let [h (hit s pt xr yr zr)] :when h] h)]
+    (if (empty? hits)
+      [nil nil]
+      (second (apply min-key #(first %) hits)))))
+
+(defn sendray [world pt xr yr zr]
+  (let [[s int] (first-hit world pt xr yr zr)]
+    (if s
+      (* (lambert s int xr yr zr) (:color (:surface s)))
+      0)))
+
+(defn color-at [world x y]
+  (let [[xr yr zr]
+        (unit-vector (- x (:x eye))
+                     (- y (:y eye))
+                     (- 0 (:z eye)))]
+    (math/round (* (sendray world eye xr yr zr) 255))))
+
+(defn make-sphere [x y z r c]
+  (Sphere. r (Point. x y z) (Surface. c)))
+
+(defn tracer [world pathname]
   (with-open [w (java.io.PrintWriter. (java.io.FileWriter. pathname))]
     (.println w (str  "P2 " (* 1 100) " " (* 1 100) " 255"))
     (doseq [y (range -49 51) x (range -49 51)]
-      (.print w (str  (color-at x y) " "))
+      (.print w (str  (color-at world x y) " "))
       (when (= 50 x) (.println w)))))
 
-(defn ray-test []
-  (def ^:dynamic *world* nil)
-  (defsphere 0 -300 -1200 200 0.8)
-  (defsphere -80 -150 -1200 200 0.7)
-  (defsphere 70 -100 -1200 200 0.9)
-  (tracer "/tmp/spheres.pgm"))
+(defn ray-test [fn] 
+  (let [world
+        [(make-sphere 0 -300 -1200 200 0.8)
+         (make-sphere -80 -150 -1200 200 0.7)
+         (make-sphere 70 -100 -1200 200 0.9)]]
+    (tracer world fn)))
+
+(defn -main [fn] (ray-test fn))
